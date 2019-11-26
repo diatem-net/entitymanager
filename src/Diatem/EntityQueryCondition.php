@@ -1,4 +1,5 @@
 <?php
+
 namespace Diatem\EntityManager;
 
 use Jin2\Db\Query\Query;
@@ -55,4 +56,5 @@ class EntityQueryCondition{
         $query->addToRequest(')');
         return $query;
     }
+    
 }

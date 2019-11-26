@@ -1,4 +1,5 @@
 <?php
+
 namespace Diatem\EntityManager;
 
 class EntityQueryJoin{

@@ -1,12 +1,31 @@
 <?php
+
 namespace Diatem\EntityManager;
 
-use Jin2\Db\Query\Query;
 use \Diatem\RestServer\RestLog;
+use Jin2\Db\Query\Query;
+use Diatem\EntityManager\SpecificException;
 
-class Entity{   
+class Entity{
+    
+    public static function checkUnicite($keys, $datas){
+        $c = get_called_class();
+        $definition = new EntityDefinition($c);
 
-    public static function _post( $datas, $fields = '*'){
+        $q = new Query();
+        $q->setRequest('SELECT FROM '.$definition->getTableName() . ' WHERE 1=1 ');
+        foreach($keys AS $key){
+            $q->addToRequest('AND '.$definition->getDdbFieldNameFromAttribute($key).' = '.$q->argument($datas[$key], Query::SQL_STRING));
+        }
+        RestLog::addLog($q->getSql());
+        $q->execute();
+        if($q->getResultsCount() > 0){
+            throw new SpecificException('G007');
+        }
+    }
+
+
+    public static function _post($datas){
         $c = get_called_class();
         $definition = new EntityDefinition($c);
         $definition->checkAddRequirements($datas);
@@ -14,7 +33,7 @@ class Entity{
         $query = new EntityQuery(null, $definition);
 
         $id = $query->executeInsert($datas);
-        $obj = new $c( $id, $fields, $key = 'id', $definition, null);
+        $obj = new $c($id, $key = 'id', $definition, null);
 
         $out = array(
             'ressource'    =>  $obj->output()
@@ -23,13 +42,13 @@ class Entity{
         return $out;
     }
 
-    public static function _getx( $fields = '*', $orderby = 'id', $ordertype = 'ASC', $limit = 20, $offset = 0, $from = 0, $fromFieldName = null, $jointures = array(), $conditions = array()){
+    public static function _getx($orderby = 'id', $ordertype = 'ASC', $limit = 20, $offset = 0, $from = 0, $fromFieldName = null, $jointures = array(), $conditions = array()){
 
         $c = get_called_class();
         $definition = new EntityDefinition($c);
         $query = new EntityQuery(null, $definition);
 
-        $datas = $query->executeSelectX($fields, $orderby, $ordertype, $limit, $offset, $from, $fromFieldName, $jointures, $conditions);
+        $datas = $query->executeSelectX($orderby, $ordertype, $limit, $offset, $from, $fromFieldName, $jointures, $conditions);
 
         $out = array(
             'count'         =>  $datas['count'],
@@ -39,23 +58,23 @@ class Entity{
         );
 
         foreach($datas['datas'] AS $r){
-            $obj = new $c( null, $fields, 'id', $definition, $r);
+            $obj = new $c( null, 'id', $definition, $r);
             $out['ressources'][] = $obj->output();
         }
 
         return $out;
-    }   
+    }
+
+    
 
     //-------------------------------------------------------------------------------
 
     protected $datas;
     protected $definition;
-    protected $fields;
     protected $key;
 
-    public function __construct( $id = null, $fields = '*', $key = 'id', $entityDefinition = null, $datas = null, $jointures = array(), $conditions = array()){
+    public function __construct( $id = null, $key = 'id', $entityDefinition = null, $datas = null, $jointures = array(), $conditions = array()){
         $this->key = $key;
-        $this->fields = $fields; 
 
         if($entityDefinition){
             $this->definition = $entityDefinition;
@@ -66,19 +85,21 @@ class Entity{
 
         if(!$datas){
             $query = new EntityQuery(null, $this->definition);   
-            $this->datas = $query->executeSelect($id, $key, $fields, $jointures, $conditions);
+            $this->datas = $query->executeSelect($id, $key, $jointures, $conditions);
 
         }else{
             $this->datas = $datas;
         }
     }
+
+   
    
     public function _put($datas){
         $query = new EntityQuery(null, $this->definition);   
         $query->executeUpdate($datas, $this->getId());
 
         $c = get_called_class();
-        $obj = new $c( $this->getId(), '*', 'id');
+        $obj = new $c( $this->getId(), 'id');
 
         $out = array(
             'ressource'    =>  $obj->output()
@@ -92,7 +113,7 @@ class Entity{
         $query->executeUpdate($datas, $this->getId());
 
         $c = get_called_class();
-        $obj = new $c( $this->getId(), '*', 'id');
+        $obj = new $c( $this->getId(), 'id');
 
         $out = array(
             'ressource'    =>  $obj->output()
@@ -113,7 +134,7 @@ class Entity{
 
     public function _up($field = 'ordre', $condition = null){
         if($this->getValue($field) == 1){
-			throw new Exception('Impossible d\'effectuer l\'opération up() : la ressource est déjà en première position');           
+            throw new SpecificException('G003');
         }
 
         $fieldOrdre = $this->definition->getDdbFieldNameFromAttribute($field);
@@ -158,7 +179,7 @@ class Entity{
         $qr = $q->getQueryResults();
 
         if($qr->getValueAt('mx',0) == $this->getValue($field)){
-            throw new Exception('Impossible d\'effectuer l\'opération down() : la ressource est déjà en dernière position');
+            throw new SpecificException('G004');
         }
 
 
@@ -200,7 +221,6 @@ class Entity{
         return $this->getValue('uid');
     }
 
-
     public function output(){
         if(is_array($this->datas)){
             $obj = $this->datas;
@@ -210,6 +230,11 @@ class Entity{
 
         $obj = array_intersect_key($obj, $this->definition->getReverseDefinition());
         $obj = array_merge($obj, $this->definition->getOutputAppend());
+
+        foreach($this->definition->getIgnoreInOutput() AS $attr){
+            unset($obj[$attr]);
+        }
+
         return $obj;
     }
 

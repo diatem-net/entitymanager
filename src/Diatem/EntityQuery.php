@@ -1,15 +1,19 @@
 <?php
 
-namespace Diatem\EntityManager;
+namespace RestServerCore\v1\entities;
 
 use Jin2\Db\Query\Query;
 use Jin2\Db\Database\DbConnexion;
+use Jin2\Db\Query\QueryResult;
 use Jin2\Utils\StringTools;
+use Jin2\Utils\ListTools;
 use \Diatem\RestServer\RestLog;
+use RestServerCore\v1\SpecificException;
 
 class EntityQuery{
 
     private $definition;
+    const VAL_NULL = 1.123456789;
 
     public function __construct($entityName = null, $entityDefinition = null){
         if($entityName){
@@ -17,11 +21,11 @@ class EntityQuery{
         }else if($entityDefinition){
             $this->definition = $entityDefinition;
         }else{
-            throw new Exception('Impossible d\'initialiser un objet EntityQuery: le nom de l\'entité ou un objet définition doit être transmis');
+            throw new SpecificException('G006');
         }
     }
 
-    public function executeSelectX($fields = '*', $orderBy = 'id', $ordertype = 'ASC', $limit = 20, $offset = 0, $from = null, $fromFieldName = null, $jointures = array(), $conditions = array()){
+    public function executeSelectX($orderBy = 'id', $ordertype = 'ASC', $limit = 20, $offset = 0, $from = null, $fromFieldName = null, $jointures = array(), $conditions = array()){
         if(!is_array($jointures)){
             $jointures = array();
         }
@@ -32,8 +36,8 @@ class EntityQuery{
 
         $q = new Query();
         $q->setRequest('SELECT 
-        COUNT(*) OVER() AS total, 
-        '.$this->determineSqlFields($fields, true).'
+        ( SELECT COUNT(*) FROM '.$this->definition->getTableName().' ) AS total, 
+        '.$this->determineSqlFields(true).'
         FROM
         '.$this->definition->getTableName());
         foreach($jointures AS $join){
@@ -52,21 +56,25 @@ class EntityQuery{
         foreach($conditions AS $condition){
             $q = $condition->apply($q, $this->definition);
         }
+
         if($from && $fromFieldName){
             $q->addToRequest('AND '.$this->definition->getDdbFieldNameFromAttribute($fromFieldName).'>'.$from);
-        }else{
-            
-
-            $newValues = array();
-            $orderValues = explode(',',$orderBy);
-            foreach($orderValues as $value){
-                $newValues[] = $this->definition->getDdbFieldNameFromAttribute($value);
-            }  
-            $orderBy = implode(',',$newValues);
-            $q->addToRequest('ORDER BY '.$orderBy.' '.$ordertype.' LIMIT '.$limit.' OFFSET '.$offset);
-            
         }
+
+        if($orderBy){
+            if($orderBy == '#RANDOM'){
+                $q->addToRequest('ORDER BY RANDOM() ');
+            }else{
+                $q->addToRequest('ORDER BY '.$this->definition->getDdbFieldNameFromAttribute($orderBy).' '.$ordertype.' ');
+            }
+        }
+
+        if(is_numeric($limit)){
+            $q->addToRequest('LIMIT '.$limit.' OFFSET '.$offset);
+        }
+
         RestLog::addLog('Query : '.$q->getSql());
+
         $q->execute();
 
         $qr = $q->getQueryResults();
@@ -78,7 +86,7 @@ class EntityQuery{
         }
     }
 
-    public function executeSelect($primaryKeyValue, $primaryKeyName = null, $fields = '*', $jointures = array(), $conditions = array()){
+    public function executeSelect($primaryKeyValue, $primaryKeyName = null, $jointures = array(), $conditions = array()){
         if(!is_array($jointures)){
             $jointures = array();
         }
@@ -94,26 +102,32 @@ class EntityQuery{
         }
 
         $q = new Query();
-        $q->setRequest('SELECT '.$this->determineSqlFields($fields, true).'
+        $q->setRequest('SELECT '.$this->determineSqlFields(true).'
         FROM
         '.$this->definition->getTableName());
         foreach($jointures AS $join){
-            $q->addToRequest($join->getJoinType().' '.$join->getTableName());
+            $q->addToRequest(' 
+            '.$join->getJoinType().' '.$join->getTableName());
             if($join->getAlias()){
                 $q->addToRequest('AS '.$join->getAlias());
             }
             $q->addToRequest('ON '.$join->getFromDbField() . '='.$join->getToDbField());
+            foreach($join->getConditions() AS $condition){
+                $q = $condition->apply($q, $this->definition);
+            }
         }
         $q->addToRequest('WHERE '.$primaryKeyName.'=:primaryKeyValue');
         foreach($conditions AS $condition){
             $q = $condition->apply($q, $this->definition);
         }
 
-        if(is_string($primaryKeyValue)){
-            $q->argument($primaryKeyValue, Query::SQL_STRING, 'primaryKeyValue');
-        }else{
+        if(is_numeric($primaryKeyValue)){
             $q->argument($primaryKeyValue, Query::SQL_NUMERIC, 'primaryKeyValue');
+        }else{
+            $q->argument($primaryKeyValue, Query::SQL_STRING, 'primaryKeyValue');
         }
+        
+        
 
         RestLog::addLog('Query : '.$q->getSql());
         $q->execute();
@@ -121,7 +135,7 @@ class EntityQuery{
         $qr = $q->getQueryResults();
 
         if($qr->count() != 1){
-            throw new Exception('Ressource inexistante'. $this->definition->getTableName().'::'.$primaryKeyName.'('.$primaryKeyValue.')');
+            throw new SpecificException('G001', $this->definition->getTableName().'::'.$primaryKeyName.'('.$primaryKeyValue.')');
         }
 
         return $qr;
@@ -157,6 +171,10 @@ class EntityQuery{
                         if(!$first){
                             $q->addToRequest(',');
                         }
+                        if(ListTools::len($sql, '.') == 2){
+                            $sql = ListTools::last($sql, '.');
+                        }
+
                         $q->addToRequest($sql);
                         $first = false;
                     }
@@ -192,7 +210,8 @@ class EntityQuery{
         }
         RestLog::addLog('Query : '.$q->getSql());
         $q->execute();
-        return DbConnexion::getLastInsertId($this->definition->getTableName(), $primaryKey);
+
+        return DbConnexion::getLastInsertId($this->definition->getTableName(),$primaryKey);
     }
 
 
@@ -210,10 +229,29 @@ class EntityQuery{
         $def = $this->definition->getDefinition();
         foreach($def AS $sql => $attribut){
             if(isset($datas[$attribut])){
-                if($datas[$attribut] != null){ 
+                if($datas[$attribut] == self::VAL_NULL){
                     if(!$first){
                         $q->addToRequest(',');
                     }
+
+                    $q->addToRequest($sql.'= NULL');
+                    $first = false;
+                }else if($datas[$attribut] == -1 && StringTools::len($attribut) >= 8 && StringTools::left($attribut, 8) == 'id_image'){
+                    if(!$first){
+                        $q->addToRequest(',');
+                    }
+
+                    $q->addToRequest($sql.'= NULL');
+                    $first = false;
+                }else if($datas[$attribut] != null){ 
+                    if(!$first){
+                        $q->addToRequest(',');
+                    }
+
+                    if(ListTools::len($sql, '.') == 2){
+                        $sql = ListTools::last($sql, '.');
+                    }
+
                     $q->addToRequest($sql.'=:'.$attribut);
                     if(is_string($datas[$attribut])){
                         $q->argument($datas[$attribut], Query::SQL_STRING, $attribut);
@@ -237,13 +275,8 @@ class EntityQuery{
         
     }
 
-    public function  determineSqlFields($fields = '*', $sqlFormat = true){
-        if($fields == '*'){
-            $fields =  $this->definition->getAttributesList();
-        }else{
-            $fields = StringTools::explode($fields,',');
-        }
-
+    public function  determineSqlFields($sqlFormat = true){
+        $fields =  $this->definition->getAttributesList();
         $intersect = array_intersect($this->definition->getDefinition(), $fields);
         if($sqlFormat){
             $out = '';

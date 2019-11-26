@@ -3,8 +3,8 @@
     "description": "Permet de manipuler des entités basiques (définition et CRUD)",
     "type": "library",
     "require": {        
-        "diatem-net/jin-com": "^2.0",    
         "diatem-net/restserver": "^1",
+        "diatem-net/jin-com": "^2.0",           
         "diatem-net/jin-utils": "^1"       
     },
     "authors": [

@@ -1,5 +1,8 @@
 <?php
+
 namespace Diatem\EntityManager;
+
+use Diatem\EntityManager\SpecificException;
 
 class EntityDefinition{
     private $definition;
@@ -10,6 +13,7 @@ class EntityDefinition{
     private $tableName;
     private $primaryKey;
     private $className;
+    private $ignoreInOutput;
 
     public function __construct($className){
         $this->definition = $className::DEF_ATTRIBUTS;
@@ -23,6 +27,7 @@ class EntityDefinition{
         $this->primaryKey = $className::DEF_PRIMARYKEY;
         $this->addRequirements = $className::DEF_ATTRIBUTS_ADDREQS;
         $this->updateRequirements = $className::DEF_ATTRIBUTS_UPDATEREQS;
+        $this->ignoreInOutput = $className::DEF_ATTRIBUTS_IGNOREINOUTPUT;
     }
 
     public function getAttributeFromDdbFieldName($ddbFieldName, $nullIfUndefined = false){
@@ -30,9 +35,13 @@ class EntityDefinition{
             if($nullIfUndefined){
                 return null;
             }
-            throw new Exception('Attribut inexistant'. $ddbFieldName);
+            throw new SpecificException('G002', $ddbFieldName);
         }
         return $this->definition[$ddbFieldName];
+    }
+
+    public function getIgnoreInOutput(){
+        return $this->ignoreInOutput;
     }
 
     public function getDdbFieldNameFromAttribute($ddbFieldName, $nullIfUndefined = false){
@@ -40,7 +49,7 @@ class EntityDefinition{
             if($nullIfUndefined){
                 return null;
             }
-            throw new Exception('Attribut inexistant'. $ddbFieldName);
+            throw new SpecificException('G002', $ddbFieldName);
         }
         return $this->definitionReverse[$ddbFieldName];
     }
@@ -79,8 +88,8 @@ class EntityDefinition{
 
     public function checkAddRequirements($datas){
         foreach($this->addRequirements AS $r){
-            if(!isset($datas[$r]) || $datas[$r] == null || $datas[$r] == ''){
-                throw new Exception('Impossible d\'ajouter une ressource dans la vue, un attribut requis est manquant'. $this->className.'::'.$r);
+            if(!isset($datas[$r]) || $datas[$r] === null){
+                throw new SpecificException('G005', $this->className.'::'.$r);
             }
         }
     }
@@ -88,12 +97,10 @@ class EntityDefinition{
     public function checkUpdateRequirements($datas){
         foreach($this->updateRequirements AS $r){
             if(!isset($datas[$r]) || $datas[$r] == null || $datas[$r] == ''){
-                throw new Exception('Impossible d\'ajouter une ressource dans la vue, un attribut requis est manquant'. $this->className.'::'.$r);
+                throw new SpecificException('G005', $this->className.'::'.$r);
             }
         }
     }
-
-    
 
     public function prepareDatas($datas){
         $out = array();
