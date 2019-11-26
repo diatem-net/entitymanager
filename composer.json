@@ -1,0 +1,21 @@
+{
+    "name": "diatem-net/entitymanager",
+    "description": "Permet de manipuler des entités basiques (définition et CRUD)",
+    "type": "library",
+    "require": {        
+        "diatem-net/jin-com": "^2.0",    
+        "diatem-net/restserver": "^1",
+        "diatem-net/jin-utils": "^1"       
+    },
+    "authors": [
+        {
+            "name": "Loic Gerard",
+            "email": "lgerard@diatem.net"
+        }
+    ],
+	"autoload": {
+        "psr-0": {
+            "Diatem\\EntityManager": "src/"
+        }
+    }
+}
