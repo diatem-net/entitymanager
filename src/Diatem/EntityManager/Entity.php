@@ -36,7 +36,7 @@ class Entity{
         $obj = new $c($id, $key = 'id', $definition, null);
 
         $out = array(
-            'ressource'    =>  $obj->output()
+            'data'    =>  $obj->output()
         );
 
         return $out;
@@ -54,12 +54,12 @@ class Entity{
             'count'         =>  $datas['count'],
             'total'         =>  $datas['total'],
             'offset'        =>  $offset,
-            'ressources'    =>  array()
+            'results'       =>  array()
         );
 
-        foreach($datas['datas'] AS $r){
+        foreach($datas['data'] AS $r){
             $obj = new $c( null, 'id', $definition, $r);
-            $out['ressources'][] = $obj->output();
+            $out['results'][] = $obj->output();
         }
 
         return $out;
@@ -73,7 +73,7 @@ class Entity{
     protected $definition;
     protected $key;
 
-    public function __construct( $id = null, $key = 'id', $entityDefinition = null, $datas = null, $jointures = array(), $conditions = array()){
+    public function __construct( $id = null, $key = 'id', $entityDefinition = null, $datas = null, $jointures = array(), $conditions = array(), $throwing = true, $error = 'G001'){
         $this->key = $key;
 
         if($entityDefinition){
@@ -85,7 +85,7 @@ class Entity{
 
         if(!$datas){
             $query = new EntityQuery(null, $this->definition);   
-            $this->datas = $query->executeSelect($id, $key, $jointures, $conditions);
+            $this->datas = $query->executeSelect($id, $key, $jointures, $conditions, $throwing, $error);
 
         }else{
             $this->datas = $datas;
@@ -102,7 +102,7 @@ class Entity{
         $obj = new $c( $this->getId(), 'id');
 
         $out = array(
-            'ressource'    =>  $obj->output()
+            'data'    =>  $obj->output()
         );
 
         return $out;
@@ -113,10 +113,10 @@ class Entity{
         $query->executeUpdate($datas, $this->getId());
 
         $c = get_called_class();
-        $obj = new $c( $this->getId(), 'id');
+        $obj = new $c( $this->getId(), 'id', new EntityDefinition($c));
 
         $out = array(
-            'ressource'    =>  $obj->output()
+            'data'    =>  $obj->output()
         );
 
         return $out;

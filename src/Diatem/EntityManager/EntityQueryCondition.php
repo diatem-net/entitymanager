@@ -24,23 +24,28 @@ class EntityQueryCondition{
         $i = 1;
         foreach($this->iterates AS $it){
             $pName = 'f'.uniqid();
-            $attr = $definition->getDdbFieldNameFromAttribute($it['attribut'], true);
-            if($attr === null){
+            $attr = $definition->getDdbFieldNameFromAttribute(
+                $it['attribut'], true
+            );
+
+            if(is_null($attr)){
                 $attr = $it['attribut'];
             }
+
             if(!$first){
                 $query->addToRequest($it['operand']);
             }
-            if($it['valeur'] === null){
+
+            if(is_null($it['valeur'])){
                 $query->addToRequest($attr.' '.$it['test'].' NULL');
             }else if($it['test'] == 'IN'){
-                $query->addToRequest($attr.' '.$it['test']. '('.$it['valeur'].')');
+                $query->addToRequest($attr.' '.$it['test']. ' ('.$it['valeur'].')');
             }else if($it['test'] == 'LIKE'){
                 $query->addToRequest('lower('.$attr.') '.$it['test']. ' \''.StringTools::toLowerCase($it['valeur']).'\'');
             }else{
                 $query->addToRequest($attr.' '.$it['test'].' :'.$pName);
 
-                if($it['valeur'] === true || $it['valeur'] === false){
+                if(is_bool($it['valeur'])){
                     $query->argument($it['valeur'], Query::SQL_BOOL, $pName);
                 }else if(is_string($it['valeur'])){
                     $query->argument($it['valeur'], Query::SQL_STRING, $pName);

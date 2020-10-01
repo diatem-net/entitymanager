@@ -31,11 +31,34 @@ class EntityQuery{
 
         if(!is_array($conditions)){
             $conditions = array();
-        }                       
+        }
+
+        $query = new Query();
+        $query->setRequest('SELECT DISTINCT COUNT(DISTINCT ' . $this->definition->getTableName() . '.' . $this->definition->getPrimaryDbKey() . ') FROM '.$this->definition->getTableName());
+        foreach($jointures AS $join){
+            $query->addToRequest($join->getJoinType().' '.$join->getTableName());
+            if($join->getAlias()){
+                $query->addToRequest('AS '.$join->getAlias());
+            }
+            $query->addToRequest('ON '.$join->getFromDbField() . '='.$join->getToDbField());
+            foreach($join->getConditions() AS $condition){
+                $query = $condition->apply($query, $this->definition);
+            }
+        }
+        $query->addToRequest('WHERE 1=1');
+
+
+        foreach($conditions AS $condition){
+            $query = $condition->apply($query, $this->definition);
+        }
+
+        if($from && $fromFieldName){
+            $query->addToRequest('AND '.$this->definition->getDdbFieldNameFromAttribute($fromFieldName).'>'.$from);
+        }
 
         $q = new Query();
-        $q->setRequest('SELECT 
-        ( SELECT COUNT(*) FROM '.$this->definition->getTableName().' ) AS total, 
+        $q->setRequest('SELECT DISTINCT 
+        ( '.$query->getSql().' ) AS total, 
         '.$this->determineSqlFields(true).'
         FROM
         '.$this->definition->getTableName());
@@ -64,7 +87,7 @@ class EntityQuery{
             if($orderBy == '#RANDOM'){
                 $q->addToRequest('ORDER BY RANDOM() ');
             }else{
-                $q->addToRequest('ORDER BY '.$this->definition->getDdbFieldNameFromAttribute($orderBy).' '.$ordertype.' ');
+                $q->addToRequest('ORDER BY '.$this->definition->getTableName().'.'.$this->definition->getDdbFieldNameFromAttribute($orderBy).' '.$ordertype.' ');
             }
         }
 
@@ -79,13 +102,13 @@ class EntityQuery{
         $qr = $q->getQueryResults();
 
         if($qr->count() == 0){
-            return array('datas' => array(), 'total' => 0, 'count' => 0);
+            return array('data' => array(), 'total' => 0, 'count' => 0);
         }else{
-            return array('datas' => $qr, 'total' => $qr->getValueAt('total', 0), 'count' => $qr->count());
+            return array('data' => $qr, 'total' => $qr->getValueAt('total', 0), 'count' => $qr->count());
         }
     }
 
-    public function executeSelect($primaryKeyValue, $primaryKeyName = null, $jointures = array(), $conditions = array()){
+    public function executeSelect($primaryKeyValue, $primaryKeyName = null, $jointures = array(), $conditions = array(), $throwing = true, $error = 'G001'){
         if(!is_array($jointures)){
             $jointures = array();
         }
@@ -115,15 +138,21 @@ class EntityQuery{
                 $q = $condition->apply($q, $this->definition);
             }
         }
-        $q->addToRequest('WHERE '.$primaryKeyName.'=:primaryKeyValue');
+        if (!is_null($primaryKeyValue)) {
+            $q->addToRequest('WHERE '.$primaryKeyName.'=:primaryKeyValue');
+        } else {
+            $q->addToRequest('WHERE 1=1');
+        }
         foreach($conditions AS $condition){
             $q = $condition->apply($q, $this->definition);
         }
 
-        if(is_numeric($primaryKeyValue)){
-            $q->argument($primaryKeyValue, Query::SQL_NUMERIC, 'primaryKeyValue');
-        }else{
-            $q->argument($primaryKeyValue, Query::SQL_STRING, 'primaryKeyValue');
+        if (!is_null($primaryKeyValue)) {
+            if(is_numeric($primaryKeyValue)){
+                $q->argument($primaryKeyValue, Query::SQL_NUMERIC, 'primaryKeyValue');
+            }else {
+                $q->argument($primaryKeyValue, Query::SQL_STRING, 'primaryKeyValue');
+            }
         }
         
         
@@ -133,8 +162,8 @@ class EntityQuery{
 
         $qr = $q->getQueryResults();
 
-        if($qr->count() != 1){
-            throw new SpecificException('G001', $this->definition->getTableName().'::'.$primaryKeyName.'('.$primaryKeyValue.')');
+        if($qr->count() != 1 && $throwing){
+            throw new SpecificException($error, $this->definition->getTableName().'::'.$primaryKeyName.'('.$primaryKeyValue.')');
         }
 
         return $qr;
@@ -284,7 +313,7 @@ class EntityQuery{
                 if(!$first){
                     $out .= ", \n";
                 }
-                $out .= $fieldName.' AS '.$restName;
+                $out .= $this->definition->getTableName().'.'.$fieldName.' AS '.$restName;
                 $first = false;
             }
             return $out;
